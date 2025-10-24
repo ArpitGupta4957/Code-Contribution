@@ -51,15 +51,19 @@ EXT_TO_LANG = {
 }
 
 
+from pygments.lexers import get_lexer_for_filename
+from pygments.util import ClassNotFound
+
 def detect_language(path: Path) -> str:
-    ext = path.suffix
-    if ext in EXT_TO_LANG:
-        return EXT_TO_LANG[ext]
-    # handle double suffix like .c++ or .c++ is not common; fallback to folder hints
-    parent = path.parent.name.lower()
-    if parent in ('c', 'c++', 'cpp'):
-        return 'C/C++'
-    return ext.lstrip('.') or 'unknown'
+    try:
+        # Let pygments determine the language from the filename/extension
+        lexer = get_lexer_for_filename(str(path))
+        return lexer.name
+    except ClassNotFound:
+        # Fallback for unknown extensions
+        return path.suffix.lstrip('.') or 'unknown'
+
+# The large EXT_TO_LANG dictionary is no longer needed.
 
 
 def gather_files(root: Path) -> list[tuple[Path, str]]:
@@ -69,6 +73,7 @@ def gather_files(root: Path) -> list[tuple[Path, str]]:
         parts = Path(dirpath).parts
         if '.git' in parts or '.github' in parts or '__pycache__' in parts:
             continue
+        
         for fn in filenames:
             p = Path(dirpath) / fn
             # skip binary files and large files by extension
@@ -76,6 +81,20 @@ def gather_files(root: Path) -> list[tuple[Path, str]]:
                 continue
             files.append((p.relative_to(root), detect_language(p)))
     return sorted(files, key=lambda x: str(x[0]))
+
+def gather_files(root: Path) -> list[tuple[Path, str]]:
+     files = []
+     for dirpath, dirnames, filenames in os.walk(root):
+         # skip .git and hidden build dirs
+        dirnames[:] = [d for d in dirnames if d not in ('.git', '.github', '__pycache__')]
+
+        for fn in filenames:
+             p = Path(dirpath) / fn
+             # skip binary files and large files by extension
+             if p.suffix.lower() in ('.png', '.jpg', '.jpeg', '.gif', '.ico', '.exe', '.dll'):
+                 continue
+             files.append((p.relative_to(root), detect_language(p)))
+     return sorted(files, key=lambda x: str(x[0]))
 
 
 def build_index(root: Path, out_path: Path) -> None:
